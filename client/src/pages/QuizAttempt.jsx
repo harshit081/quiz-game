@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import api from '../api';
 import { useAuth } from '../auth.jsx';
 
 const QuizAttempt = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const [quiz, setQuiz] = useState(null);
   const [current, setCurrent] = useState(0);
@@ -18,11 +19,19 @@ const QuizAttempt = () => {
   const [startedAt, setStartedAt] = useState(null);
 
   useEffect(() => {
-    api.get(`/quizzes/${id}`).then(({ data }) => {
+    const codeFromQuery = searchParams.get('code');
+    const codeFromStorage = sessionStorage.getItem(`quiz_code_${id}`);
+    const code = codeFromQuery || codeFromStorage || '';
+    const query = code ? `?code=${encodeURIComponent(code)}` : '';
+
+    api.get(`/quizzes/${id}${query}`).then(({ data }) => {
       setQuiz(data);
       setAttemptLocked(Boolean(data.attempted));
+      if (code) {
+        sessionStorage.setItem(`quiz_code_${id}`, code);
+      }
     });
-  }, [id]);
+  }, [id, searchParams]);
 
   const storageKey = useMemo(() => {
     const userId = user?.id || 'guest';
@@ -82,10 +91,11 @@ const QuizAttempt = () => {
   }, [secondsLeft]);
 
   useEffect(() => {
+    if (!restored || !startedAt) return;
     if (secondsLeft === 0 && quiz && !submitting && !attemptLocked) {
       handleSubmit();
     }
-  }, [secondsLeft, quiz, submitting, attemptLocked]);
+  }, [secondsLeft, quiz, submitting, attemptLocked, restored, startedAt]);
 
   const questions = quiz?.questions || [];
   const question = questions[current];

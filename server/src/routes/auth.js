@@ -6,7 +6,7 @@ const router = express.Router();
 
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password, role, adminSecret } = req.body;
+    const { name, email, password, role, adminSecret, teacherSecret } = req.body;
     if (!name || !email || !password) {
       return res.status(400).json({ message: 'Missing fields' });
     }
@@ -15,17 +15,22 @@ router.post('/register', async (req, res) => {
       return res.status(403).json({ message: 'Invalid admin secret' });
     }
 
+    if (role === 'teacher' && process.env.TEACHER_SECRET && teacherSecret !== process.env.TEACHER_SECRET) {
+      return res.status(403).json({ message: 'Invalid teacher secret' });
+    }
+
     const existing = await User.findOne({ email });
     if (existing) {
       return res.status(409).json({ message: 'Email already registered' });
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
+    const normalizedRole = role === 'admin' ? 'admin' : role === 'teacher' ? 'teacher' : 'student';
     const user = await User.create({
       name,
       email,
       passwordHash,
-      role: role === 'admin' ? 'admin' : 'student',
+      role: normalizedRole,
     });
 
     req.session.user = { id: user._id.toString(), role: user.role, name: user.name };

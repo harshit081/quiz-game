@@ -9,6 +9,7 @@ const Register = () => {
     password: '',
     role: 'student',
     adminSecret: '',
+    teacherSecret: '',
   });
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -67,14 +68,24 @@ const Register = () => {
           Role
           <select name="role" value={form.role} onChange={handleChange}>
             <option value="student">Student</option>
+            <option value="teacher">Teacher</option>
             <option value="admin">Admin</option>
           </select>
         </label>
+        {form.role === 'teacher' && (
+          <label>
+            Teacher secret
+            <input name="teacherSecret" value={form.teacherSecret} onChange={handleChange} required />
+          </label>
+        )}
         {form.role === 'admin' && (
           <label>
             Admin secret
             <input name="adminSecret" value={form.adminSecret} onChange={handleChange} required />
           </label>
+        )}
+        {form.role === 'teacher' && (
+          <p className="helper">Ask your institution for the teacher secret key.</p>
         )}
         {form.role === 'admin' && (
           <p className="helper">Ask your instructor for the admin secret key.</p>

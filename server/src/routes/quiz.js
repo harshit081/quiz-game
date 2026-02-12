@@ -1,4 +1,5 @@
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const Quiz = require('../models/Quiz');
 const Attempt = require('../models/Attempt');
 const { requireAuth } = require('../middleware/auth');
@@ -15,8 +16,44 @@ const shuffle = (items) => {
 };
 
 router.get('/', requireAuth, async (req, res) => {
-  const quizzes = await Quiz.find({ isEnabled: true }).select('title category timeLimitMinutes totalMarks');
+  const query = { isEnabled: true };
+  if (req.session.user.role === 'student') {
+    query.$or = [{ accessCodeHash: null }, { accessCodeHash: { $exists: false } }];
+  }
+  const quizzes = await Quiz.find(query).select('title category timeLimitMinutes totalMarks');
   res.json(quizzes);
+});
+
+router.post('/access', requireAuth, async (req, res) => {
+  const { code } = req.body;
+  if (!code) {
+    return res.status(400).json({ message: 'Access code required' });
+  }
+
+  const candidates = await Quiz.find({ isEnabled: true, accessCodeHash: { $ne: null } });
+  for (const quiz of candidates) {
+    const match = await bcrypt.compare(code, quiz.accessCodeHash);
+    if (match) {
+      let attempted = false;
+      if (quiz.singleAttempt) {
+        attempted = Boolean(
+          await Attempt.exists({ user: req.session.user.id, quiz: quiz._id })
+        );
+      }
+
+      return res.json({
+        _id: quiz._id,
+        title: quiz.title,
+        category: quiz.category,
+        timeLimitMinutes: quiz.timeLimitMinutes,
+        totalMarks: quiz.totalMarks,
+        singleAttempt: quiz.singleAttempt,
+        attempted,
+      });
+    }
+  }
+
+  return res.status(404).json({ message: 'Invalid access code' });
 });
 
 router.get('/attempts/me', requireAuth, async (req, res) => {
@@ -47,6 +84,17 @@ router.get('/:id', requireAuth, async (req, res) => {
   const quiz = await Quiz.findOne({ _id: req.params.id, isEnabled: true });
   if (!quiz) {
     return res.status(404).json({ message: 'Quiz not found' });
+  }
+
+  if (req.session.user.role === 'student' && quiz.accessCodeHash) {
+    const code = req.query.code;
+    if (!code) {
+      return res.status(403).json({ message: 'Access code required' });
+    }
+    const match = await bcrypt.compare(code, quiz.accessCodeHash);
+    if (!match) {
+      return res.status(403).json({ message: 'Invalid access code' });
+    }
   }
 
   let attempted = false;

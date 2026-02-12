@@ -12,4 +12,11 @@ const requireAdmin = (req, res, next) => {
   return next();
 };
 
-module.exports = { requireAuth, requireAdmin };
+const requireStaff = (req, res, next) => {
+  if (!req.session.user || !['admin', 'teacher'].includes(req.session.user.role)) {
+    return res.status(403).json({ message: 'Forbidden' });
+  }
+  return next();
+};
+
+module.exports = { requireAuth, requireAdmin, requireStaff };

@@ -18,6 +18,7 @@ const quizSchema = new mongoose.Schema(
     marksPerQuestion: { type: Number, default: 1 },
     isEnabled: { type: Boolean, default: true },
     singleAttempt: { type: Boolean, default: true },
+    accessCodeHash: { type: String, default: null },
     questions: { type: [questionSchema], default: [] },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },

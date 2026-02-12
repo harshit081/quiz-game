@@ -18,6 +18,7 @@ const AdminQuizzes = () => {
     questions: [emptyQuestion],
     isEnabled: true,
     singleAttempt: true,
+    accessCode: '',
   });
   const [bankForm, setBankForm] = useState({
     text: '',
@@ -138,6 +139,7 @@ const AdminQuizzes = () => {
         questions: [emptyQuestion],
         isEnabled: true,
         singleAttempt: true,
+        accessCode: '',
       });
       setEditingId(null);
       loadQuizzes();
@@ -158,6 +160,7 @@ const AdminQuizzes = () => {
       questions: quiz.questions?.length ? quiz.questions : [emptyQuestion],
       isEnabled: quiz.isEnabled,
       singleAttempt: quiz.singleAttempt,
+      accessCode: '',
     });
   };
 
@@ -170,6 +173,7 @@ const AdminQuizzes = () => {
       questions: [emptyQuestion],
       isEnabled: true,
       singleAttempt: true,
+      accessCode: '',
     });
     setNotice('');
   };
@@ -217,6 +221,14 @@ const AdminQuizzes = () => {
               value={form.timeLimitMinutes}
               onChange={(e) => setForm({ ...form, timeLimitMinutes: Number(e.target.value) })}
               required
+            />
+          </label>
+          <label>
+            Access code (optional)
+            <input
+              value={form.accessCode}
+              onChange={(e) => setForm({ ...form, accessCode: e.target.value })}
+              placeholder="Leave blank for public quiz"
             />
           </label>
           <label className="checkbox">

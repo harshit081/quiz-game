@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Doughnut } from 'react-chartjs-2';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
 import api from '../api';
@@ -9,9 +9,13 @@ ChartJS.register(ArcElement, Tooltip, Legend);
 
 const Dashboard = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [quizzes, setQuizzes] = useState([]);
   const [quizzesLoading, setQuizzesLoading] = useState(true);
   const [quizzesError, setQuizzesError] = useState('');
+  const [accessCode, setAccessCode] = useState('');
+  const [accessError, setAccessError] = useState('');
+  const [accessLoading, setAccessLoading] = useState(false);
   const [stats, setStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [statsError, setStatsError] = useState('');
@@ -87,6 +91,25 @@ const Dashboard = () => {
     };
   }, [stats]);
 
+  const handleAccessSubmit = async (e) => {
+    e.preventDefault();
+    setAccessError('');
+    if (!accessCode.trim()) {
+      setAccessError('Enter a quiz access code.');
+      return;
+    }
+    setAccessLoading(true);
+    try {
+      const { data } = await api.post('/quizzes/access', { code: accessCode.trim() });
+      sessionStorage.setItem(`quiz_code_${data._id}`, accessCode.trim());
+      navigate(`/quiz/${data._id}?code=${encodeURIComponent(accessCode.trim())}`);
+    } catch (err) {
+      setAccessError(err.response?.data?.message || 'Invalid access code.');
+    } finally {
+      setAccessLoading(false);
+    }
+  };
+
   return (
     <div className="dashboard">
       <section className="hero">
@@ -116,6 +139,25 @@ const Dashboard = () => {
           <h2>Available Quizzes</h2>
           <p className="muted">Pick a quiz and start your attempt.</p>
         </div>
+        {user?.role === 'student' && (
+          <form className="form compact" onSubmit={handleAccessSubmit}>
+            <label>
+              Enter access code
+              <div className="input-group">
+                <input
+                  value={accessCode}
+                  onChange={(e) => setAccessCode(e.target.value)}
+                  placeholder="Quiz code"
+                  required
+                />
+                <button className="btn" type="submit" disabled={accessLoading}>
+                  Unlock
+                </button>
+              </div>
+            </label>
+            {accessError && <div className="alert">{accessError}</div>}
+          </form>
+        )}
         <div className="grid">
           {quizzesLoading && (
             Array.from({ length: 4 }).map((_, index) => (

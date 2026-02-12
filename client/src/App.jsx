@@ -24,7 +24,7 @@ const Navigation = () => {
           <>
             <Link to="/">Dashboard</Link>
             <Link to="/attempts">My Attempts</Link>
-            {user.role === 'admin' && (
+            {['admin', 'teacher'].includes(user.role) && (
               <>
                 <Link to="/admin/quizzes">Admin</Link>
                 <Link to="/admin/attempts">Attempts</Link>
@@ -79,12 +79,12 @@ const AppLayout = () => (
           </ProtectedRoute>
         )} />
         <Route path="/admin/quizzes" element={(
-          <ProtectedRoute requireAdmin>
+          <ProtectedRoute requireStaff>
             <AdminQuizzes />
           </ProtectedRoute>
         )} />
         <Route path="/admin/attempts" element={(
-          <ProtectedRoute requireAdmin>
+          <ProtectedRoute requireStaff>
             <AdminAttempts />
           </ProtectedRoute>
         )} />
