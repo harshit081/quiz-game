@@ -11,6 +11,7 @@ const Register = () => {
     adminSecret: '',
   });
   const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const { register } = useAuth();
   const navigate = useNavigate();
 
@@ -44,8 +45,24 @@ const Register = () => {
         </label>
         <label>
           Password
-          <input name="password" type="password" value={form.password} onChange={handleChange} required />
+          <div className="input-group">
+            <input
+              name="password"
+              type={showPassword ? 'text' : 'password'}
+              value={form.password}
+              onChange={handleChange}
+              required
+            />
+            <button
+              className="btn ghost"
+              type="button"
+              onClick={() => setShowPassword((prev) => !prev)}
+            >
+              {showPassword ? 'Hide' : 'Show'}
+            </button>
+          </div>
         </label>
+        <p className="helper">Use at least 8 characters for a stronger password.</p>
         <label>
           Role
           <select name="role" value={form.role} onChange={handleChange}>
@@ -58,6 +75,9 @@ const Register = () => {
             Admin secret
             <input name="adminSecret" value={form.adminSecret} onChange={handleChange} required />
           </label>
+        )}
+        {form.role === 'admin' && (
+          <p className="helper">Ask your instructor for the admin secret key.</p>
         )}
         {error && <div className="alert">{error}</div>}
         <button className="btn primary" type="submit">Register</button>

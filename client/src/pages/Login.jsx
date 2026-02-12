@@ -5,6 +5,7 @@ import { useAuth } from '../auth.jsx';
 const Login = () => {
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
@@ -34,8 +35,24 @@ const Login = () => {
         </label>
         <label>
           Password
-          <input name="password" type="password" value={form.password} onChange={handleChange} required />
+          <div className="input-group">
+            <input
+              name="password"
+              type={showPassword ? 'text' : 'password'}
+              value={form.password}
+              onChange={handleChange}
+              required
+            />
+            <button
+              className="btn ghost"
+              type="button"
+              onClick={() => setShowPassword((prev) => !prev)}
+            >
+              {showPassword ? 'Hide' : 'Show'}
+            </button>
+          </div>
         </label>
+        <p className="helper">Use the email you registered with.</p>
         {error && <div className="alert">{error}</div>}
         <button className="btn primary" type="submit">Log in</button>
       </form>

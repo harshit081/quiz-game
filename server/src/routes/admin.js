@@ -2,6 +2,7 @@ const express = require('express');
 const Quiz = require('../models/Quiz');
 const Attempt = require('../models/Attempt');
 const User = require('../models/User');
+const Question = require('../models/Question');
 const { requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
@@ -85,6 +86,68 @@ router.get('/attempts', async (req, res) => {
     .populate('quiz', 'title category')
     .sort({ createdAt: -1 });
   res.json(attempts);
+});
+
+router.get('/attempts.csv', async (req, res) => {
+  const attempts = await Attempt.find()
+    .populate('user', 'name email')
+    .populate('quiz', 'title category totalMarks')
+    .sort({ createdAt: -1 });
+
+  const rows = [
+    ['Student Name', 'Student Email', 'Quiz', 'Category', 'Score', 'Total Marks', 'Time (s)', 'Attempt Date'],
+  ];
+
+  attempts.forEach((attempt) => {
+    rows.push([
+      attempt.user?.name || 'Unknown',
+      attempt.user?.email || 'Unknown',
+      attempt.quiz?.title || 'Unknown',
+      attempt.quiz?.category || 'Unknown',
+      String(attempt.score),
+      String(attempt.quiz?.totalMarks ?? ''),
+      String(attempt.timeTakenSeconds),
+      attempt.attemptDate.toISOString(),
+    ]);
+  });
+
+  const csv = rows
+    .map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename="attempts.csv"');
+  res.send(csv);
+});
+
+router.get('/questions', async (req, res) => {
+  const questions = await Question.find().sort({ createdAt: -1 });
+  res.json(questions);
+});
+
+router.post('/questions', async (req, res) => {
+  const { text, options, correctIndex, category } = req.body;
+  if (!text || !Array.isArray(options) || options.length < 2 || correctIndex === undefined || !category) {
+    return res.status(400).json({ message: 'Missing fields' });
+  }
+
+  const question = await Question.create({
+    text,
+    options,
+    correctIndex,
+    category,
+    createdBy: req.session.user.id,
+  });
+
+  return res.status(201).json(question);
+});
+
+router.delete('/questions/:id', async (req, res) => {
+  const question = await Question.findByIdAndDelete(req.params.id);
+  if (!question) {
+    return res.status(404).json({ message: 'Question not found' });
+  }
+  return res.json({ message: 'Deleted' });
 });
 
 router.get('/stats', async (req, res) => {

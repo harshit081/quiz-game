@@ -15,6 +15,8 @@ const QuizResult = () => {
   }
 
   const reviewMap = new Map(result.review.map((item) => [item.questionId, item]));
+  const correctCount = result.review.filter((item) => item.isCorrect).length;
+  const accuracy = Math.round((correctCount / result.totalMarks) * 100);
 
   return (
     <div className="panel">
@@ -23,13 +25,17 @@ const QuizResult = () => {
         <p className="muted">{quiz.title}</p>
       </div>
       <div className="result-score">
-        <div>
+        <div className="result-card">
           <span className="label">Score</span>
           <strong>{result.score} / {result.totalMarks}</strong>
         </div>
-        <div>
+        <div className="result-card">
           <span className="label">Status</span>
           <strong>{result.score >= Math.ceil(result.totalMarks * 0.5) ? 'Pass' : 'Needs review'}</strong>
+        </div>
+        <div className="result-card">
+          <span className="label">Accuracy</span>
+          <strong>{accuracy}%</strong>
         </div>
       </div>
 
@@ -68,6 +74,7 @@ const QuizResult = () => {
 
       <div className="actions">
         <Link className="btn" to="/">Back to dashboard</Link>
+        <Link className="btn ghost" to={`/quiz/${quiz._id}/leaderboard`}>Leaderboard</Link>
       </div>
     </div>
   );

@@ -19,10 +19,41 @@ router.get('/', requireAuth, async (req, res) => {
   res.json(quizzes);
 });
 
+router.get('/attempts/me', requireAuth, async (req, res) => {
+  const attempts = await Attempt.find({ user: req.session.user.id })
+    .populate('quiz', 'title category totalMarks')
+    .sort({ createdAt: -1 });
+  res.json(attempts);
+});
+
+router.get('/:id/leaderboard', requireAuth, async (req, res) => {
+  const attempts = await Attempt.find({ quiz: req.params.id })
+    .sort({ score: -1, timeTakenSeconds: 1, attemptDate: 1 })
+    .limit(10)
+    .populate('user', 'name');
+
+  res.json(
+    attempts.map((attempt) => ({
+      _id: attempt._id,
+      score: attempt.score,
+      timeTakenSeconds: attempt.timeTakenSeconds,
+      attemptDate: attempt.attemptDate,
+      user: attempt.user ? { name: attempt.user.name } : { name: 'Anonymous' },
+    }))
+  );
+});
+
 router.get('/:id', requireAuth, async (req, res) => {
   const quiz = await Quiz.findOne({ _id: req.params.id, isEnabled: true });
   if (!quiz) {
     return res.status(404).json({ message: 'Quiz not found' });
+  }
+
+  let attempted = false;
+  if (quiz.singleAttempt) {
+    attempted = Boolean(
+      await Attempt.exists({ user: req.session.user.id, quiz: quiz._id })
+    );
   }
 
   const questions = shuffle(quiz.questions).map((q) => ({
@@ -38,6 +69,7 @@ router.get('/:id', requireAuth, async (req, res) => {
     timeLimitMinutes: quiz.timeLimitMinutes,
     totalMarks: quiz.totalMarks,
     singleAttempt: quiz.singleAttempt,
+    attempted,
     questions,
   });
 });

@@ -8,6 +8,8 @@ import AdminQuizzes from './pages/AdminQuizzes';
 import AdminAttempts from './pages/AdminAttempts';
 import QuizAttempt from './pages/QuizAttempt';
 import QuizResult from './pages/QuizResult';
+import StudentAttempts from './pages/StudentAttempts';
+import QuizLeaderboard from './pages/QuizLeaderboard';
 
 const Navigation = () => {
   const { user, logout } = useAuth();
@@ -17,11 +19,18 @@ const Navigation = () => {
       <div className="logo">
         <Link to="/">QuizForge</Link>
       </div>
-      <nav>
+      <nav className="nav-links">
         {user ? (
           <>
             <Link to="/">Dashboard</Link>
-            {user.role === 'admin' && <Link to="/admin/quizzes">Admin</Link>}
+            <Link to="/attempts">My Attempts</Link>
+            {user.role === 'admin' && (
+              <>
+                <Link to="/admin/quizzes">Admin</Link>
+                <Link to="/admin/attempts">Attempts</Link>
+              </>
+            )}
+            <span className="nav-user">{user.name} · {user.role}</span>
             <button className="btn ghost" type="button" onClick={logout}>
               Logout
             </button>
@@ -54,9 +63,19 @@ const AppLayout = () => (
             <QuizAttempt />
           </ProtectedRoute>
         )} />
+        <Route path="/quiz/:id/leaderboard" element={(
+          <ProtectedRoute>
+            <QuizLeaderboard />
+          </ProtectedRoute>
+        )} />
         <Route path="/result" element={(
           <ProtectedRoute>
             <QuizResult />
+          </ProtectedRoute>
+        )} />
+        <Route path="/attempts" element={(
+          <ProtectedRoute>
+            <StudentAttempts />
           </ProtectedRoute>
         )} />
         <Route path="/admin/quizzes" element={(

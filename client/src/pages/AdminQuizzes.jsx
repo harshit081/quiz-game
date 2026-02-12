@@ -6,6 +6,11 @@ const emptyQuestion = { text: '', options: ['', '', '', ''], correctIndex: 0 };
 const AdminQuizzes = () => {
   const [quizzes, setQuizzes] = useState([]);
   const [editingId, setEditingId] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [bank, setBank] = useState([]);
+  const [bankLoading, setBankLoading] = useState(true);
+  const [bankError, setBankError] = useState('');
   const [form, setForm] = useState({
     title: '',
     category: '',
@@ -14,14 +19,41 @@ const AdminQuizzes = () => {
     isEnabled: true,
     singleAttempt: true,
   });
+  const [bankForm, setBankForm] = useState({
+    text: '',
+    category: '',
+    options: ['', '', '', ''],
+    correctIndex: 0,
+  });
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
 
-  const loadQuizzes = () => {
-    api.get('/admin/quizzes').then(({ data }) => setQuizzes(data));
+  const loadQuizzes = async () => {
+    setLoading(true);
+    try {
+      const { data } = await api.get('/admin/quizzes');
+      setQuizzes(data);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadBank = async () => {
+    setBankLoading(true);
+    setBankError('');
+    try {
+      const { data } = await api.get('/admin/questions');
+      setBank(data);
+    } catch (err) {
+      setBankError('Unable to load question bank.');
+    } finally {
+      setBankLoading(false);
+    }
   };
 
   useEffect(() => {
     loadQuizzes();
+    loadBank();
   }, []);
 
   const handleQuestionChange = (index, field, value) => {
@@ -46,6 +78,39 @@ const AdminQuizzes = () => {
     setForm((prev) => ({ ...prev, questions: [...prev.questions, emptyQuestion] }));
   };
 
+  const addFromBank = (question) => {
+    setForm((prev) => ({
+      ...prev,
+      questions: [
+        ...prev.questions,
+        {
+          text: question.text,
+          options: [...question.options],
+          correctIndex: question.correctIndex,
+        },
+      ],
+    }));
+  };
+
+  const saveBankQuestion = async (e) => {
+    e.preventDefault();
+    setBankError('');
+    try {
+      await api.post('/admin/questions', bankForm);
+      setBankForm({ text: '', category: '', options: ['', '', '', ''], correctIndex: 0 });
+      loadBank();
+    } catch (err) {
+      setBankError(err.response?.data?.message || 'Unable to save question.');
+    }
+  };
+
+  const deleteBankQuestion = async (id) => {
+    const confirmed = window.confirm('Delete this question from the bank?');
+    if (!confirmed) return;
+    await api.delete(`/admin/questions/${id}`);
+    loadBank();
+  };
+
   const removeQuestion = (index) => {
     setForm((prev) => ({
       ...prev,
@@ -56,11 +121,15 @@ const AdminQuizzes = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setNotice('');
+    setSaving(true);
     try {
       if (editingId) {
         await api.put(`/admin/quizzes/${editingId}`, form);
+        setNotice('Quiz updated successfully.');
       } else {
         await api.post('/admin/quizzes', form);
+        setNotice('Quiz created successfully.');
       }
       setForm({
         title: '',
@@ -74,11 +143,14 @@ const AdminQuizzes = () => {
       loadQuizzes();
     } catch (err) {
       setError(err.response?.data?.message || 'Could not create quiz');
+    } finally {
+      setSaving(false);
     }
   };
 
   const startEdit = (quiz) => {
     setEditingId(quiz._id);
+    setNotice('');
     setForm({
       title: quiz.title,
       category: quiz.category,
@@ -89,12 +161,27 @@ const AdminQuizzes = () => {
     });
   };
 
+  const cancelEdit = () => {
+    setEditingId(null);
+    setForm({
+      title: '',
+      category: '',
+      timeLimitMinutes: 15,
+      questions: [emptyQuestion],
+      isEnabled: true,
+      singleAttempt: true,
+    });
+    setNotice('');
+  };
+
   const toggleQuiz = async (quizId) => {
     await api.patch(`/admin/quizzes/${quizId}/toggle`);
     loadQuizzes();
   };
 
   const deleteQuiz = async (quizId) => {
+    const confirmed = window.confirm('Delete this quiz? This cannot be undone.');
+    if (!confirmed) return;
     await api.delete(`/admin/quizzes/${quizId}`);
     loadQuizzes();
   };
@@ -104,6 +191,11 @@ const AdminQuizzes = () => {
       <div className="panel-header">
         <h2>{editingId ? 'Edit Quiz' : 'Create Quiz'}</h2>
         <p className="muted">Build quizzes with MCQ questions.</p>
+      </div>
+      <div className="info-banner">
+        <p>
+          Keep questions short and focused. Students see one question at a time with a live timer.
+        </p>
       </div>
       <form className="form" onSubmit={handleSubmit}>
         <div className="grid two">
@@ -184,10 +276,16 @@ const AdminQuizzes = () => {
         ))}
 
         {error && <div className="alert">{error}</div>}
+        {notice && <div className="notice">{notice}</div>}
 
         <div className="actions">
           <button type="button" className="btn ghost" onClick={addQuestion}>Add question</button>
-          <button type="submit" className="btn primary">
+          {editingId && (
+            <button type="button" className="btn" onClick={cancelEdit}>
+              Cancel edit
+            </button>
+          )}
+          <button type="submit" className="btn primary" disabled={saving}>
             {editingId ? 'Update quiz' : 'Create quiz'}
           </button>
         </div>
@@ -196,12 +294,113 @@ const AdminQuizzes = () => {
       <div className="divider" />
 
       <div className="panel-header">
+        <h3>Question Bank</h3>
+        <p className="muted">Reuse questions across quizzes.</p>
+      </div>
+      <form className="form" onSubmit={saveBankQuestion}>
+        <div className="grid two">
+          <label>
+            Question text
+            <input
+              value={bankForm.text}
+              onChange={(e) => setBankForm({ ...bankForm, text: e.target.value })}
+              required
+            />
+          </label>
+          <label>
+            Category
+            <input
+              value={bankForm.category}
+              onChange={(e) => setBankForm({ ...bankForm, category: e.target.value })}
+              required
+            />
+          </label>
+        </div>
+        <div className="grid two">
+          {bankForm.options.map((opt, index) => (
+            <label key={`bank-opt-${index}`}>
+              Option {String.fromCharCode(65 + index)}
+              <input
+                value={opt}
+                onChange={(e) => {
+                  const options = bankForm.options.map((value, idx) => (idx === index ? e.target.value : value));
+                  setBankForm({ ...bankForm, options });
+                }}
+                required
+              />
+            </label>
+          ))}
+        </div>
+        <label>
+          Correct option
+          <select
+            value={bankForm.correctIndex}
+            onChange={(e) => setBankForm({ ...bankForm, correctIndex: Number(e.target.value) })}
+          >
+            {bankForm.options.map((_, index) => (
+              <option key={`bank-correct-${index}`} value={index}>
+                {String.fromCharCode(65 + index)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="actions">
+          <button className="btn" type="submit">Save to bank</button>
+        </div>
+        {bankError && <div className="alert">{bankError}</div>}
+      </form>
+
+      <div className="grid bank-grid">
+        {bankLoading && Array.from({ length: 3 }).map((_, index) => (
+          <div key={`bank-skeleton-${index}`} className="card skeleton" />
+        ))}
+        {!bankLoading && bank.map((question) => (
+          <div key={question._id} className="card">
+            <div className="card-header">
+              <h4>{question.text}</h4>
+              <span className="pill">{question.category}</span>
+            </div>
+            <ol className="option-list">
+              {question.options.map((opt, idx) => (
+                <li key={`bank-${question._id}-${idx}`} className={idx === question.correctIndex ? 'correct' : ''}>
+                  {String.fromCharCode(65 + idx)}. {opt}
+                </li>
+              ))}
+            </ol>
+            <div className="actions">
+              <button className="btn" type="button" onClick={() => addFromBank(question)}>
+                Add to quiz
+              </button>
+              <button className="btn ghost" type="button" onClick={() => deleteBankQuestion(question._id)}>
+                Delete
+              </button>
+            </div>
+          </div>
+        ))}
+        {!bankLoading && !bank.length && (
+          <div className="empty">
+            <p className="muted">No question bank items yet.</p>
+          </div>
+        )}
+      </div>
+
+      <div className="divider" />
+
+      <div className="panel-header">
         <h3>Manage Quizzes</h3>
       </div>
       <div className="grid">
-        {quizzes.map((quiz) => (
+        {loading && Array.from({ length: 3 }).map((_, index) => (
+          <div key={`quiz-skeleton-${index}`} className="card skeleton" />
+        ))}
+        {!loading && quizzes.map((quiz) => (
           <div key={quiz._id} className="card">
-            <h4>{quiz.title}</h4>
+            <div className="card-header">
+              <h4>{quiz.title}</h4>
+              <span className={`status ${quiz.isEnabled ? 'live' : 'draft'}`}>
+                {quiz.isEnabled ? 'Live' : 'Disabled'}
+              </span>
+            </div>
             <p className="muted">{quiz.category}</p>
             <p className="meta">{quiz.timeLimitMinutes} min · {quiz.totalMarks} marks</p>
             <div className="actions">
@@ -215,6 +414,11 @@ const AdminQuizzes = () => {
             </div>
           </div>
         ))}
+        {!loading && !quizzes.length && (
+          <div className="empty">
+            <p className="muted">No quizzes created yet.</p>
+          </div>
+        )}
       </div>
     </div>
   );
