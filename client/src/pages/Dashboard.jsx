@@ -54,6 +54,8 @@ const Dashboard = () => {
         if (user.role === 'admin') {
           const { data } = await api.get('/admin/stats');
           setStats({
+            usersCount: data.usersCount ?? 0,
+            quizCount: data.quizCount ?? 0,
             averageScore: data.averageScore ?? 0,
             attemptsCount: data.attemptsCount ?? 0,
           });

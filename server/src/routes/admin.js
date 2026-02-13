@@ -499,7 +499,28 @@ router.get('/stats', async (req, res) => {
   ]);
 
   const scores = await Attempt.aggregate([
-    { $group: { _id: null, avgScore: { $avg: '$score' } } },
+    {
+      $lookup: {
+        from: 'quizzes',
+        localField: 'quiz',
+        foreignField: '_id',
+        as: 'quizDoc',
+      },
+    },
+    { $unwind: '$quizDoc' },
+    {
+      $project: {
+        percentage: {
+          $cond: [
+            { $gt: ['$quizDoc.totalMarks', 0] },
+            { $multiply: [{ $divide: ['$score', '$quizDoc.totalMarks'] }, 100] },
+            null,
+          ],
+        },
+      },
+    },
+    { $match: { percentage: { $ne: null } } },
+    { $group: { _id: null, avgScore: { $avg: '$percentage' } } },
   ]);
 
   res.json({
