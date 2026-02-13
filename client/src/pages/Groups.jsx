@@ -94,7 +94,11 @@ const Groups = () => {
       <section className="welcome-section">
         <div className="welcome-content">
           <h1><FiUsers style={{ verticalAlign: 'middle', marginRight: '0.4rem' }} /> Groups & Classes</h1>
-          <p>Create groups for classes or join with a shared code.</p>
+          <p>
+            {isTeacher
+              ? 'Create groups for classes or join with a shared code.'
+              : 'Join groups with a shared code.'}
+          </p>
         </div>
         {hasGroups && (
           <div className="welcome-actions group-corner-actions">
@@ -226,7 +230,9 @@ const Groups = () => {
           ))}
           {!loading && error && <div className="alert alert-error">{error}</div>}
           {!loading && !error && !groups.length && (
-            <div className="empty-state"><p>No groups yet. Create one or join with a code!</p></div>
+            <div className="empty-state">
+              <p>{isTeacher ? 'No groups yet. Create one or join with a code!' : 'No groups yet. Join with a code!'}</p>
+            </div>
           )}
         </div>
       </section>
