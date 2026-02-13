@@ -13,10 +13,27 @@ dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 4000;
-const clientOrigin = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
-console.log('Client origin:', clientOrigin);
+const isProduction = process.env.NODE_ENV === 'production';
+const allowedOrigins = (process.env.CLIENT_ORIGIN || 'http://localhost:5173')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+if (isProduction) {
+  app.set('trust proxy', 1);
+}
+
+console.log('Allowed client origins:', allowedOrigins.join(', '));
 app.use(cors({
-  origin: clientOrigin,
+  origin(origin, callback) {
+    if (!origin) {
+      return callback(null, true);
+    }
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Origin not allowed by CORS'));
+  },
   credentials: true,
 }));
 app.use(express.json());
@@ -25,19 +42,30 @@ const createSessionStore = MongoStore.create
   ? MongoStore.create.bind(MongoStore)
   : MongoStore.default?.create.bind(MongoStore.default);
 
+const configuredSameSite = (process.env.COOKIE_SAME_SITE || '').trim().toLowerCase();
+const cookieSameSite = configuredSameSite || (isProduction ? 'none' : 'lax');
+let cookieSecure = process.env.COOKIE_SECURE
+  ? process.env.COOKIE_SECURE === 'true'
+  : isProduction;
+
+if (cookieSameSite === 'none') {
+  cookieSecure = true;
+}
+
 app.use(
   session({
     secret: process.env.SESSION_SECRET || 'change-me',
     resave: false,
     saveUninitialized: false,
+    proxy: isProduction,
     store: createSessionStore({
       mongoUrl: process.env.MONGO_URI,
       collectionName: 'sessions',
     }),
     cookie: {
       httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
+      sameSite: cookieSameSite,
+      secure: cookieSecure,
       maxAge: 1000 * 60 * 60 * 8,
     },
   })
