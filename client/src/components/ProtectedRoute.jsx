@@ -1,7 +1,7 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../auth.jsx';
 
-const ProtectedRoute = ({ children, requireAdmin = false, requireStaff = false }) => {
+const ProtectedRoute = ({ children, requireAdmin = false, requireStaff = false, requireStudent = false }) => {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -22,6 +22,10 @@ const ProtectedRoute = ({ children, requireAdmin = false, requireStaff = false }
   }
 
   if (requireStaff && !['admin', 'teacher'].includes(user.role)) {
+    return <Navigate to="/" replace />;
+  }
+
+  if (requireStudent && user.role !== 'student') {
     return <Navigate to="/" replace />;
   }
 

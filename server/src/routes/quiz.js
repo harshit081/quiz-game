@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const Quiz = require('../models/Quiz');
 const Attempt = require('../models/Attempt');
+const Group = require('../models/Group');
 const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
@@ -15,13 +16,80 @@ const shuffle = (items) => {
   return copy;
 };
 
-router.get('/', requireAuth, async (req, res) => {
-  const query = { isEnabled: true };
-  if (req.session.user.role === 'student') {
-    query.$or = [{ accessCodeHash: null }, { accessCodeHash: { $exists: false } }];
+const isOwner = (req, quiz) => quiz.createdBy?.toString() === req.session.user.id;
+
+const userGroupIds = async (userId) => {
+  const groups = await Group.find({ members: userId }).select('_id');
+  return groups.map((group) => group._id);
+};
+
+const ensureQuizAccess = async (req, quiz, code) => {
+  const normalizedAccessType = quiz.accessType || (quiz.accessCodeHash ? 'code' : 'global');
+  if (req.session.user.role !== 'student' && isOwner(req, quiz)) {
+    return { ok: true };
   }
-  const quizzes = await Quiz.find(query).select('title category timeLimitMinutes totalMarks');
-  res.json(quizzes);
+
+  if (normalizedAccessType === 'global') {
+    return { ok: true };
+  }
+
+  if (normalizedAccessType === 'group') {
+    const groupIds = await userGroupIds(req.session.user.id);
+    if (groupIds.some((id) => id.toString() === String(quiz.group))) {
+      return { ok: true };
+    }
+    return { ok: false, message: 'Group access required' };
+  }
+
+  if (normalizedAccessType === 'code') {
+    if (!code) {
+      return { ok: false, message: 'Access code required' };
+    }
+    const match = await bcrypt.compare(code, quiz.accessCodeHash || '');
+    if (!match) {
+      return { ok: false, message: 'Invalid access code' };
+    }
+    return { ok: true };
+  }
+
+  return { ok: false, message: 'Access denied' };
+};
+
+router.get('/', requireAuth, async (req, res) => {
+  const { scope = 'available' } = req.query;
+  const groupIds = await userGroupIds(req.session.user.id);
+
+  const globalFilter = {
+    isEnabled: true,
+    $or: [
+      { accessType: 'global' },
+      { accessType: { $exists: false }, accessCodeHash: null },
+    ],
+  };
+
+  if (scope === 'global') {
+    const quizzes = await Quiz.find(globalFilter)
+      .select('title category timeLimitMinutes totalMarks');
+    return res.json(quizzes);
+  }
+
+  if (scope === 'group') {
+    const quizzes = await Quiz.find({
+      isEnabled: true,
+      accessType: 'group',
+      group: { $in: groupIds },
+    }).select('title category timeLimitMinutes totalMarks');
+    return res.json(quizzes);
+  }
+
+  const quizzes = await Quiz.find({
+    isEnabled: true,
+    $or: [
+      ...globalFilter.$or,
+      { accessType: 'group', group: { $in: groupIds } },
+    ],
+  }).select('title category timeLimitMinutes totalMarks');
+  return res.json(quizzes);
 });
 
 router.post('/access', requireAuth, async (req, res) => {
@@ -30,7 +98,11 @@ router.post('/access', requireAuth, async (req, res) => {
     return res.status(400).json({ message: 'Access code required' });
   }
 
-  const candidates = await Quiz.find({ isEnabled: true, accessCodeHash: { $ne: null } });
+  const candidates = await Quiz.find({
+    isEnabled: true,
+    accessCodeHash: { $ne: null },
+    $or: [{ accessType: 'code' }, { accessType: { $exists: false } }],
+  });
   for (const quiz of candidates) {
     const match = await bcrypt.compare(code, quiz.accessCodeHash);
     if (match) {
@@ -64,6 +136,17 @@ router.get('/attempts/me', requireAuth, async (req, res) => {
 });
 
 router.get('/:id/leaderboard', requireAuth, async (req, res) => {
+  const quiz = await Quiz.findById(req.params.id);
+  if (!quiz || !quiz.isEnabled) {
+    return res.status(404).json({ message: 'Quiz not found' });
+  }
+
+  const code = req.query.code;
+  const access = await ensureQuizAccess(req, quiz, code);
+  if (!access.ok) {
+    return res.status(403).json({ message: access.message });
+  }
+
   const attempts = await Attempt.find({ quiz: req.params.id })
     .sort({ score: -1, timeTakenSeconds: 1, attemptDate: 1 })
     .limit(10)
@@ -86,15 +169,10 @@ router.get('/:id', requireAuth, async (req, res) => {
     return res.status(404).json({ message: 'Quiz not found' });
   }
 
-  if (req.session.user.role === 'student' && quiz.accessCodeHash) {
-    const code = req.query.code;
-    if (!code) {
-      return res.status(403).json({ message: 'Access code required' });
-    }
-    const match = await bcrypt.compare(code, quiz.accessCodeHash);
-    if (!match) {
-      return res.status(403).json({ message: 'Invalid access code' });
-    }
+  const code = req.query.code;
+  const access = await ensureQuizAccess(req, quiz, code);
+  if (!access.ok) {
+    return res.status(403).json({ message: access.message });
   }
 
   let attempted = false;
@@ -127,6 +205,12 @@ router.post('/:id/attempt', requireAuth, async (req, res) => {
     const quiz = await Quiz.findById(req.params.id);
     if (!quiz || !quiz.isEnabled) {
       return res.status(404).json({ message: 'Quiz not found' });
+    }
+
+    const code = req.query.code;
+    const access = await ensureQuizAccess(req, quiz, code);
+    if (!access.ok) {
+      return res.status(403).json({ message: access.message });
     }
 
     if (quiz.singleAttempt) {

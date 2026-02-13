@@ -7,6 +7,7 @@ const { connectDb } = require('./db');
 const authRoutes = require('./routes/auth');
 const quizRoutes = require('./routes/quiz');
 const adminRoutes = require('./routes/admin');
+const groupRoutes = require('./routes/groups');
 
 dotenv.config();
 
@@ -49,6 +50,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/quizzes', quizRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/groups', groupRoutes);
 
 connectDb()
   .then(() => {

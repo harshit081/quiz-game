@@ -6,6 +6,7 @@ const questionSchema = new mongoose.Schema(
     options: { type: [String], required: true },
     correctIndex: { type: Number, required: true },
     category: { type: String, required: true },
+    scope: { type: String, enum: ['global', 'personal'], default: 'personal' },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },
   { timestamps: true }

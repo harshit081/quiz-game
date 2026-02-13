@@ -6,17 +6,13 @@ const router = express.Router();
 
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password, role, adminSecret, teacherSecret } = req.body;
+    const { name, email, password, role, adminSecret } = req.body;
     if (!name || !email || !password) {
       return res.status(400).json({ message: 'Missing fields' });
     }
 
     if (role === 'admin' && adminSecret !== process.env.ADMIN_SECRET) {
       return res.status(403).json({ message: 'Invalid admin secret' });
-    }
-
-    if (role === 'teacher' && process.env.TEACHER_SECRET && teacherSecret !== process.env.TEACHER_SECRET) {
-      return res.status(403).json({ message: 'Invalid teacher secret' });
     }
 
     const existing = await User.findOne({ email });

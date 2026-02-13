@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { FiChevronLeft, FiChevronRight, FiZap } from 'react-icons/fi';
 import api from '../api';
 import { useAuth } from '../auth.jsx';
+import '../styles/quiz-attempt.css';
 
 const QuizAttempt = () => {
   const { id } = useParams();
@@ -17,21 +19,21 @@ const QuizAttempt = () => {
   const [attemptLocked, setAttemptLocked] = useState(false);
   const [restored, setRestored] = useState(false);
   const [startedAt, setStartedAt] = useState(null);
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(true);
+  const accessCode = searchParams.get('code') || sessionStorage.getItem(`quiz_code_${id}`) || '';
 
   useEffect(() => {
-    const codeFromQuery = searchParams.get('code');
-    const codeFromStorage = sessionStorage.getItem(`quiz_code_${id}`);
-    const code = codeFromQuery || codeFromStorage || '';
-    const query = code ? `?code=${encodeURIComponent(code)}` : '';
+    const query = accessCode ? `?code=${encodeURIComponent(accessCode)}` : '';
 
     api.get(`/quizzes/${id}${query}`).then(({ data }) => {
       setQuiz(data);
       setAttemptLocked(Boolean(data.attempted));
-      if (code) {
-        sessionStorage.setItem(`quiz_code_${id}`, code);
+      if (accessCode) {
+        sessionStorage.setItem(`quiz_code_${id}`, accessCode);
       }
     });
-  }, [id, searchParams]);
+  }, [id, searchParams, accessCode]);
 
   const storageKey = useMemo(() => {
     const userId = user?.id || 'guest';
@@ -97,6 +99,36 @@ const QuizAttempt = () => {
     }
   }, [secondsLeft, quiz, submitting, attemptLocked, restored, startedAt]);
 
+  useEffect(() => {
+    if (!quiz) return undefined;
+    let mounted = true;
+    let interval;
+
+    const loadLeaderboard = async () => {
+      try {
+        const query = accessCode ? `?code=${encodeURIComponent(accessCode)}` : '';
+        const { data } = await api.get(`/quizzes/${id}/leaderboard${query}`);
+        if (mounted) {
+          setLeaderboard(data);
+        }
+      } finally {
+        if (mounted) {
+          setLeaderboardLoading(false);
+        }
+      }
+    };
+
+    loadLeaderboard();
+    interval = setInterval(loadLeaderboard, 12000);
+
+    return () => {
+      mounted = false;
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [quiz, id, accessCode]);
+
   const questions = quiz?.questions || [];
   const question = questions[current];
 
@@ -120,7 +152,8 @@ const QuizAttempt = () => {
     }));
 
     try {
-      const { data } = await api.post(`/quizzes/${quiz._id}/attempt`, {
+      const query = accessCode ? `?code=${encodeURIComponent(accessCode)}` : '';
+      const { data } = await api.post(`/quizzes/${quiz._id}/attempt${query}`, {
         answers: payloadAnswers,
         timeTakenSeconds: quiz.timeLimitMinutes * 60 - secondsLeft,
       });
@@ -159,67 +192,111 @@ const QuizAttempt = () => {
   }
 
   return (
-    <div className="panel">
-      <div className="quiz-header">
-        <div>
-          <h2>{quiz.title}</h2>
-          <p className="muted">{quiz.category}</p>
-        </div>
-        <div className="timer">Time left: {formattedTime}</div>
-      </div>
-
-      <div className="progress-row">
-        <span className="pill">Question {current + 1} / {questions.length}</span>
-        <span className="muted">Answered {Object.keys(answers).length} of {questions.length}</span>
-      </div>
-      <div className="progress">
+    <div className="quiz-attempt-page">
+      {/* Top Progress Bar */}
+      <div className="attempt-progress-bar">
         <div
-          className="progress-bar"
+          className="progress-fill"
           style={{ width: `${((current + 1) / questions.length) * 100}%` }}
         />
+        <div className="progress-info">
+          Question {current + 1} of {questions.length} • {formattedTime} left
+        </div>
       </div>
 
-      {question && (
-        <div className="question">
-          <h3>
-            Q{current + 1}. {question.text}
-          </h3>
-          <div className="options">
-            {question.options.map((opt, idx) => (
+      <div className="quiz-arena">
+        <div className="quiz-shell">
+          {/* Main Content Area */}
+          <section className="arena-main">
+            {/* Question Card */}
+            {question && (
+              <div className="question-section">
+                <h1 className="question-text">{question.text}</h1>
+              </div>
+            )}
+
+            {/* Answer Options */}
+            <div className="answers-section">
+              {question?.options.map((opt, idx) => (
+                <label key={`${question._id}-${idx}`} className="answer-option">
+                  <input
+                    type="radio"
+                    name={`question-${question._id}`}
+                    checked={answers[question._id] === idx}
+                    onChange={() => selectOption(question._id, idx)}
+                    className="answer-radio"
+                  />
+                  <span className="answer-text">{opt}</span>
+                </label>
+              ))}
+            </div>
+
+            {submitError && <div className="alert alert-error">{submitError}</div>}
+
+            {/* Navigation Buttons */}
+            <div className="quiz-navigation">
               <button
-                key={`${question._id}-${idx}`}
-                className={`option ${answers[question._id] === idx ? 'selected' : ''}`}
+                className="btn btn-secondary"
                 type="button"
-                onClick={() => selectOption(question._id, idx)}
+                disabled={current === 0}
+                onClick={() => setCurrent((prev) => prev - 1)}
               >
-                <span className="badge">{String.fromCharCode(65 + idx)}</span>
-                {opt}
+                <FiChevronLeft size={16} /> Previous
               </button>
-            ))}
-          </div>
+
+              <span className="nav-counter">
+                {current + 1} / {questions.length}
+              </span>
+
+              {current < questions.length - 1 ? (
+                <button
+                  className="btn btn-primary"
+                  type="button"
+                  onClick={() => setCurrent((prev) => prev + 1)}
+                >
+                  Next <FiChevronRight size={16} />
+                </button>
+              ) : (
+                <button
+                  className="btn btn-primary btn-submit"
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={submitting || attemptLocked}
+                >
+                  {submitting ? 'Submitting...' : 'Submit Quiz'}
+                </button>
+              )}
+            </div>
+          </section>
+
+          {/* Leaderboard Sidebar */}
+          <aside className="leaderboard-sidebar">
+            <div className="leaderboard-header">
+              <h3>Live Leaderboard</h3>
+              <span className="leaderboard-badge"><FiZap size={14} /> Live</span>
+            </div>
+
+            <div className="leaderboard-list">
+              {leaderboardLoading ? (
+                Array.from({ length: 6 }).map((_, index) => (
+                  <div key={`skeleton-${index}`} className="leaderboard-entry skeleton" />
+                ))
+              ) : leaderboard.length > 0 ? (
+                leaderboard.map((entry, index) => (
+                  <div key={entry._id} className="leaderboard-entry">
+                    <span className="rank-badge">{index + 1}</span>
+                    <div className="entry-info">
+                      <p className="entry-name">{entry.user?.name || 'Student'}</p>
+                    </div>
+                    <span className="entry-score">{entry.score} pts</span>
+                  </div>
+                ))
+              ) : (
+                <p className="empty-message">No submissions yet</p>
+              )}
+            </div>
+          </aside>
         </div>
-      )}
-
-      {submitError && <div className="alert">{submitError}</div>}
-
-      <div className="actions">
-        <button className="btn ghost" type="button" disabled={current === 0} onClick={() => setCurrent((prev) => prev - 1)}>
-          Previous
-        </button>
-        {current < questions.length - 1 ? (
-          <button className="btn" type="button" onClick={() => setCurrent((prev) => prev + 1)}>
-            Next
-          </button>
-        ) : (
-          <button
-            className="btn primary"
-            type="button"
-            onClick={handleSubmit}
-            disabled={submitting || attemptLocked}
-          >
-            Submit quiz
-          </button>
-        )}
       </div>
     </div>
   );
