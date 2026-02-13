@@ -109,6 +109,56 @@
   gap: 1.2rem;
 }
 
+.analytics-section {
+  padding: 2rem;
+  background: white;
+  border-radius: 20px;
+  border: 1px solid #e0e8f0;
+}
+
+[data-theme="dark"] .analytics-section {
+  background: rgba(15, 20, 35, 0.9);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.analytics-section h2 {
+  margin: 0 0 1.2rem;
+  font-size: 1.25rem;
+  color: #0f1322;
+}
+
+[data-theme="dark"] .analytics-section h2 {
+  color: #e9efff;
+}
+
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.chart-card {
+  min-height: 300px;
+  background: #f8fafc;
+  border: 1px solid #e0e8f0;
+  border-radius: 14px;
+  padding: 1rem;
+}
+
+[data-theme="dark"] .chart-card {
+  background: rgba(12, 16, 30, 0.8);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.empty-chart {
+  margin: 0;
+  color: rgba(15, 19, 34, 0.65);
+}
+
+[data-theme="dark"] .empty-chart {
+  color: rgba(233, 239, 255, 0.65);
+}
+
 .stat-box {
   background: linear-gradient(135deg, #f0f5ff 0%, #f0e6ff 100%);
   padding: 1.6rem;
@@ -498,6 +548,10 @@
 @media (max-width: 1024px) {
   .welcome-stats {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .charts-grid {
+    grid-template-columns: 1fr;
   }
 
   .quiz-grid {

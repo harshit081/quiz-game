@@ -252,7 +252,7 @@ router.get('/attempts', async (req, res) => {
 
   const attempts = await Attempt.find(quizIds ? { quiz: { $in: quizIds } } : {})
     .populate('user', 'name email')
-    .populate('quiz', 'title category')
+    .populate('quiz', 'title category totalMarks')
     .sort({ createdAt: -1 });
   res.json(attempts);
 });
