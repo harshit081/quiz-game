@@ -46,17 +46,18 @@ const StudentAttempts = () => {
       </section>
 
       <section className="quizzes-table-wrapper">
-        <div className="table-header" style={{ gridTemplateColumns: '2fr 1fr 1fr 1.5fr' }}>
+        <div className="table-header" style={{ gridTemplateColumns: '2fr 1fr 1fr 1.5fr auto' }}>
           <span>Quiz</span>
           <span>Score</span>
           <span>Time</span>
           <span>Date</span>
+          <span>Review</span>
         </div>
         {loading && Array.from({ length: 4 }).map((_, index) => (
           <div key={`attempt-skeleton-${index}`} className="table-row skeleton" style={{ height: '56px' }} />
         ))}
         {!loading && attempts.map((attempt) => (
-          <div key={attempt._id} className="table-row" style={{ gridTemplateColumns: '2fr 1fr 1fr 1.5fr' }}>
+          <div key={attempt._id} className="table-row" style={{ gridTemplateColumns: '2fr 1fr 1fr 1.5fr auto' }}>
             <span>
               <strong>{attempt.quiz?.title}</strong>
               <div style={{ fontSize: '0.8rem', opacity: 0.6 }}>{attempt.quiz?.category}</div>
@@ -64,6 +65,11 @@ const StudentAttempts = () => {
             <span><strong>{attempt.score}</strong> / {attempt.quiz?.totalMarks ?? '-'}</span>
             <span>{Math.ceil(attempt.timeTakenSeconds / 60)} min</span>
             <span>{new Date(attempt.attemptDate).toLocaleString()}</span>
+            <span>
+              <Link className="btn btn-secondary" to={`/attempts/${attempt._id}`}>
+                View Responses
+              </Link>
+            </span>
           </div>
         ))}
         {!loading && error && <div className="alert alert-error">{error}</div>}

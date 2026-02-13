@@ -59,6 +59,14 @@
   align-items: flex-start;
 }
 
+.quiz-attempt-page .quiz-arena {
+  min-height: auto;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  box-shadow: none;
+}
+
 .quiz-shell {
   width: 100%;
   max-width: 1200px;

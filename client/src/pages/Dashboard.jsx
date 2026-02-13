@@ -15,7 +15,6 @@ const Dashboard = () => {
   const [accessError, setAccessError] = useState('');
   const [accessLoading, setAccessLoading] = useState(false);
   const [stats, setStats] = useState(null);
-  const [statsLoading, setStatsLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('all');
 
   // Get unique categories from quizzes
@@ -28,11 +27,14 @@ const Dashboard = () => {
       : quizzes.filter((q) => q.category === selectedCategory);
 
   useEffect(() => {
+    if (!user) return;
+
     const loadData = async () => {
       setQuizzesLoading(true);
       setQuizzesError('');
       try {
-        const { data } = await api.get('/quizzes?scope=group');
+        const endpoint = user.role === 'student' ? '/quizzes?scope=available' : '/admin/quizzes';
+        const { data } = await api.get(endpoint);
         setQuizzes(data);
       } catch (err) {
         setQuizzesError('Unable to load quizzes right now.');
@@ -42,26 +44,47 @@ const Dashboard = () => {
     };
 
     loadData();
-  }, []);
+  }, [user]);
 
   useEffect(() => {
-    if (user?.role === 'admin') {
-      const loadStats = async () => {
-        setStatsLoading(true);
-        try {
-          const { data } = await api.get('/admin/stats');
-          setStats(data);
-        } catch (err) {
-          console.error('Failed to load stats:', err);
-        } finally {
-          setStatsLoading(false);
-        }
-      };
+    if (!user) return;
 
-      loadStats();
-    } else {
-      setStatsLoading(false);
-    }
+    const loadStats = async () => {
+      try {
+        if (user.role === 'admin') {
+          const { data } = await api.get('/admin/stats');
+          setStats({
+            averageScore: data.averageScore ?? 0,
+            attemptsCount: data.attemptsCount ?? 0,
+          });
+          return;
+        }
+
+        if (user.role === 'teacher') {
+          const { data: attemptsData } = await api.get('/admin/attempts');
+          setStats({
+            attemptsCount: attemptsData.length,
+          });
+          return;
+        }
+
+        const { data } = await api.get('/quizzes/stats/me');
+
+        setStats({
+          averagePercentage: data.averagePercentage ?? 0,
+          attemptsCount: data.attemptsCount ?? 0,
+        });
+      } catch (err) {
+        console.error('Failed to load dashboard stats:', err);
+        setStats({
+          averageScore: 0,
+          averagePercentage: 0,
+          attemptsCount: 0,
+        });
+      }
+    };
+
+    loadStats();
   }, [user]);
 
   const handleAccessSubmit = async (e) => {
@@ -122,10 +145,16 @@ const Dashboard = () => {
             <div className="stat-number">{quizzes.length}</div>
             <div className="stat-label">Available Quizzes</div>
           </div>
-          <div className="stat-card">
-            <div className="stat-number">{stats?.averageScore || '—'}</div>
-            <div className="stat-label">Avg. Score</div>
-          </div>
+          {user?.role !== 'teacher' && (
+            <div className="stat-card">
+              <div className="stat-number">
+                {user?.role === 'student'
+                  ? (stats?.averagePercentage != null ? `${stats.averagePercentage}%` : '—')
+                  : (stats?.averageScore != null ? `${stats.averageScore}%` : '—')}
+              </div>
+              <div className="stat-label">{user?.role === 'student' ? 'Avg. Percentage' : 'Avg. Score'}</div>
+            </div>
+          )}
           <div className="stat-card">
             <div className="stat-number">{stats?.attemptsCount || 0}</div>
             <div className="stat-label">Attempts</div>
@@ -151,7 +180,7 @@ const Dashboard = () => {
               <div className="stat-title">Total Attempts</div>
             </div>
             <div className="stat-box">
-              <div className="stat-value">{stats?.averageScore || '0'}%</div>
+              <div className="stat-value">{stats?.averageScore != null ? `${stats.averageScore}%` : '0%'}</div>
               <div className="stat-title">Avg Score</div>
             </div>
           </div>
@@ -226,6 +255,16 @@ const Dashboard = () => {
           <div className="quiz-grid">
             {filteredQuizzes.map((quiz) => (
               <div key={quiz._id} className="quiz-card">
+                {(() => {
+                  const savedCode = sessionStorage.getItem(`quiz_code_${quiz._id}`) || '';
+                  const codeQuery = savedCode ? `?code=${encodeURIComponent(savedCode)}` : '';
+                  const startPath = `/quiz/${quiz._id}${codeQuery}`;
+                  const leaderboardPath = `/quiz/${quiz._id}/leaderboard${codeQuery}`;
+                  const isStudent = user?.role === 'student';
+                  const hideStart = isStudent && quiz.singleAttempt && quiz.attempted;
+
+                  return (
+                    <>
                 <div className={`quiz-header ${getCategoryColor(quiz.category)}`}>
                   <div className="quiz-icon">
                     {getCategoryIcon(quiz.category)}
@@ -237,25 +276,45 @@ const Dashboard = () => {
                   <span><FiClock style={{ verticalAlign: 'middle', marginRight: '0.25rem' }} />{quiz.timeLimitMinutes} min</span>
                   <span><FiStar style={{ verticalAlign: 'middle', marginRight: '0.25rem' }} />{quiz.totalMarks} marks</span>
                 </div>
+                {isStudent && quiz.attempted && (
+                  <div className="quiz-meta" style={{ marginTop: '-0.4rem' }}>
+                    <span>
+                      <strong>My Score:</strong> {quiz.latestScore} / {quiz.totalMarks}
+                    </span>
+                  </div>
+                )}
                 <div className="quiz-rating">
                   {/* Star rating placeholder - can be enhanced with actual ratings */}
                   <span>{[1,2,3,4,5].map(i => <FiStar key={i} size={14} style={{ verticalAlign: 'middle' }} />)} (4.5)</span>
                   <span className="review-count">128 reviews</span>
                 </div>
                 <div className="quiz-actions">
+                  {!hideStart && (
+                    <Link
+                      to={startPath}
+                      className="btn btn-primary"
+                    >
+                      Start Quiz
+                    </Link>
+                  )}
+                  {hideStart && quiz.latestAttemptId && (
+                    <Link
+                      to={`/attempts/${quiz.latestAttemptId}`}
+                      className="btn btn-secondary"
+                    >
+                      View Score
+                    </Link>
+                  )}
                   <Link
-                    to={`/quiz/${quiz._id}`}
-                    className="btn btn-primary"
-                  >
-                    Start Quiz
-                  </Link>
-                  <Link
-                    to={`/quiz/${quiz._id}/leaderboard`}
+                    to={leaderboardPath}
                     className="btn btn-secondary"
                   >
                     Leaderboard
                   </Link>
                 </div>
+                    </>
+                  );
+                })()}
               </div>
             ))}
           </div>

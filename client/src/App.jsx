@@ -12,9 +12,11 @@ import AdminAttempts from './pages/AdminAttempts';
 import QuizAttempt from './pages/QuizAttempt';
 import QuizResult from './pages/QuizResult';
 import StudentAttempts from './pages/StudentAttempts';
+import AttemptReview from './pages/AttemptReview';
 import QuizLeaderboard from './pages/QuizLeaderboard';
 import GlobalQuizzes from './pages/GlobalQuizzes';
 import Groups from './pages/Groups';
+import GroupDetails from './pages/GroupDetails';
 import QuizForm from './pages/QuizForm';
 import QuestionBank from './pages/QuestionBank';
 
@@ -95,6 +97,11 @@ const AppLayout = () => {
                 <Groups />
               </ProtectedRoute>
             )} />
+            <Route path="/groups/:id" element={(
+              <ProtectedRoute>
+                <GroupDetails />
+              </ProtectedRoute>
+            )} />
             <Route path="/result" element={(
               <ProtectedRoute>
                 <QuizResult />
@@ -103,6 +110,11 @@ const AppLayout = () => {
             <Route path="/attempts" element={(
               <ProtectedRoute requireStudent>
                 <StudentAttempts />
+              </ProtectedRoute>
+            )} />
+            <Route path="/attempts/:attemptId" element={(
+              <ProtectedRoute requireStudent>
+                <AttemptReview />
               </ProtectedRoute>
             )} />
             <Route path="/admin/quizzes" element={(

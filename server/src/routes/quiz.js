@@ -58,6 +58,61 @@ const ensureQuizAccess = async (req, quiz, code) => {
 router.get('/', requireAuth, async (req, res) => {
   const { scope = 'available' } = req.query;
   const groupIds = await userGroupIds(req.session.user.id);
+  const baseSelect = 'title category timeLimitMinutes totalMarks singleAttempt accessType';
+
+  const attachAttemptSummary = async (quizDocs) => {
+    if (req.session.user.role !== 'student') {
+      return quizDocs;
+    }
+
+    const attempts = await Attempt.find({ user: req.session.user.id })
+      .select('quiz score attemptDate _id')
+      .sort({ attemptDate: -1 });
+
+    const latestAttemptByQuiz = new Map();
+    attempts.forEach((attempt) => {
+      const quizId = String(attempt.quiz);
+      if (!latestAttemptByQuiz.has(quizId)) {
+        latestAttemptByQuiz.set(quizId, {
+          attemptId: attempt._id,
+          score: attempt.score,
+          attemptDate: attempt.attemptDate,
+        });
+      }
+    });
+
+    const quizMap = new Map(quizDocs.map((quiz) => [String(quiz._id), quiz]));
+
+    if (scope === 'available' && latestAttemptByQuiz.size) {
+      const attemptedQuizIds = Array.from(latestAttemptByQuiz.keys());
+      const attemptedCodeQuizzes = await Quiz.find({
+        isEnabled: true,
+        _id: { $in: attemptedQuizIds },
+        $or: [
+          { accessType: 'code' },
+          { accessType: { $exists: false }, accessCodeHash: { $ne: null } },
+        ],
+      }).select(baseSelect);
+
+      attemptedCodeQuizzes.forEach((quiz) => {
+        const quizId = String(quiz._id);
+        if (!quizMap.has(quizId)) {
+          quizMap.set(quizId, quiz);
+        }
+      });
+    }
+
+    return Array.from(quizMap.values()).map((quizDoc) => {
+      const quiz = quizDoc.toObject();
+      const summary = latestAttemptByQuiz.get(String(quiz._id));
+      return {
+        ...quiz,
+        attempted: Boolean(summary),
+        latestScore: summary?.score ?? null,
+        latestAttemptId: summary?.attemptId ?? null,
+      };
+    });
+  };
 
   const globalFilter = {
     isEnabled: true,
@@ -69,8 +124,8 @@ router.get('/', requireAuth, async (req, res) => {
 
   if (scope === 'global') {
     const quizzes = await Quiz.find(globalFilter)
-      .select('title category timeLimitMinutes totalMarks');
-    return res.json(quizzes);
+      .select(baseSelect);
+    return res.json(await attachAttemptSummary(quizzes));
   }
 
   if (scope === 'group') {
@@ -78,8 +133,8 @@ router.get('/', requireAuth, async (req, res) => {
       isEnabled: true,
       accessType: 'group',
       group: { $in: groupIds },
-    }).select('title category timeLimitMinutes totalMarks');
-    return res.json(quizzes);
+    }).select(baseSelect);
+    return res.json(await attachAttemptSummary(quizzes));
   }
 
   const quizzes = await Quiz.find({
@@ -88,8 +143,8 @@ router.get('/', requireAuth, async (req, res) => {
       ...globalFilter.$or,
       { accessType: 'group', group: { $in: groupIds } },
     ],
-  }).select('title category timeLimitMinutes totalMarks');
-  return res.json(quizzes);
+  }).select(baseSelect);
+  return res.json(await attachAttemptSummary(quizzes));
 });
 
 router.post('/access', requireAuth, async (req, res) => {
@@ -133,6 +188,87 @@ router.get('/attempts/me', requireAuth, async (req, res) => {
     .populate('quiz', 'title category totalMarks')
     .sort({ createdAt: -1 });
   res.json(attempts);
+});
+
+router.get('/attempts/:attemptId', requireAuth, async (req, res) => {
+  const attempt = await Attempt.findById(req.params.attemptId)
+    .populate('quiz', 'title category totalMarks marksPerQuestion questions');
+
+  if (!attempt) {
+    return res.status(404).json({ message: 'Attempt not found' });
+  }
+
+  const isOwnerAttempt = attempt.user?.toString() === req.session.user.id;
+  const isAdmin = req.session.user.role === 'admin';
+  if (!isOwnerAttempt && !isAdmin) {
+    return res.status(403).json({ message: 'Forbidden' });
+  }
+
+  const quiz = attempt.quiz;
+  const questionMap = new Map((quiz?.questions || []).map((q) => [q._id.toString(), q]));
+
+  const review = (attempt.answers || []).map((answer) => {
+    const question = questionMap.get(String(answer.questionId));
+    const selectedIndex = Number(answer.selectedIndex);
+    const correctIndex = question ? Number(question.correctIndex) : -1;
+    return {
+      questionId: answer.questionId,
+      questionText: question?.text || 'Question not available',
+      options: question?.options || [],
+      selectedIndex,
+      correctIndex,
+      isCorrect: question ? selectedIndex === correctIndex : false,
+    };
+  });
+
+  return res.json({
+    attemptId: attempt._id,
+    attemptDate: attempt.attemptDate,
+    timeTakenSeconds: attempt.timeTakenSeconds,
+    score: attempt.score,
+    totalMarks: quiz?.totalMarks || 0,
+    quiz: quiz
+      ? {
+        _id: quiz._id,
+        title: quiz.title,
+        category: quiz.category,
+      }
+      : null,
+    review,
+  });
+});
+
+router.get('/stats/me', requireAuth, async (req, res) => {
+  const attempts = await Attempt.find({ user: req.session.user.id })
+    .populate('quiz', 'totalMarks')
+    .select('score quiz');
+  const attemptsCount = attempts.length;
+  const obtainedMarks = attempts.reduce((sum, attempt) => sum + Number(attempt.score || 0), 0);
+  const totalPossibleMarks = attempts.reduce((sum, attempt) => sum + Number(attempt.quiz?.totalMarks || 0), 0);
+
+  const averageMarks = attemptsCount
+    ? Number((obtainedMarks / attemptsCount).toFixed(2))
+    : 0;
+
+  const percentageSamples = attempts
+    .map((attempt) => {
+      const totalMarks = Number(attempt.quiz?.totalMarks || 0);
+      if (!totalMarks) return null;
+      return (Number(attempt.score || 0) / totalMarks) * 100;
+    })
+    .filter((value) => value != null);
+
+  const averagePercentage = percentageSamples.length
+    ? Number((percentageSamples.reduce((sum, value) => sum + value, 0) / percentageSamples.length).toFixed(2))
+    : 0;
+
+  return res.json({
+    attemptsCount,
+    averageMarks,
+    averagePercentage,
+    obtainedMarks,
+    totalPossibleMarks,
+  });
 });
 
 router.get('/:id/leaderboard', requireAuth, async (req, res) => {

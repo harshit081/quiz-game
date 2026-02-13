@@ -39,13 +39,13 @@ const Sidebar = () => {
 
   return (
     <aside className="sidebar">
-      <div className="sidebar-brand">
+      {/* <div className="sidebar-brand">
         <div className="sidebar-logo"><FiBookOpen size={24} /></div>
         <div>
           <h3>QuizForge</h3>
           <p>{user?.role || 'User'}</p>
         </div>
-      </div>
+      </div> */}
 
       <nav className="sidebar-nav">
         {links.map((link) => (
